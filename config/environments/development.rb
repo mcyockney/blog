@@ -34,4 +34,33 @@ Rails.application.configure do
 
   # Raises error for missing translations
   # config.action_view.raise_on_missing_translations = true
+  
+  config.after_initialize do
+  unless ActiveRecord::Base.connection.respond_to?(:old_execute)
+    ActiveRecord::Base.connection.class.class_eval do
+      alias_method :old_execute, :execute
+ 
+      def log_explain(str)
+        if str =~ /^SELECT.*WHERE/i
+          results = old_execute('EXPLAIN %s' % str)
+ 
+          while row = results.fetch_row
+            if row[5].blank?
+              File.open(RAILS_ROOT + '/log/sql.log', 'a') do |f|
+                f.puts str
+                f.puts row.inspect
+              end
+            end
+          end
+        end
+      end
+ 
+      def execute(*args)
+        log_explain(args.first)
+        old_execute(*args)
+      end
+    end
+  end
+end
+  
 end
